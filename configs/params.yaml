@@ -1,0 +1,49 @@
+project:
+  name: "Algorithmic Communication Models on the C. elegans Connectome"
+  seed: 42
+
+data:
+  raw_dir: "data/raw"
+  interim_dir: "data/interim"
+  processed_dir: "data/processed"
+  graphs:
+    V1: "data/processed/V1/graph_V1_directed_unweighted.gpickle"
+    V2: "data/processed/V2/graph_V2_directed_weighted.gpickle"
+    V3: "data/processed/V3/graph_V3_undirected.gpickle"
+  # 可选：感/中/运 节点清单（CSV 或 TXT 路径）
+  sensory_list: "data/interim/sensory_nodes.txt"
+  motor_list:   "data/interim/motor_nodes.txt"
+
+analysis:
+  alpha_grid: [0.0, 0.25, 0.5, 0.75, 1.0]   # E2 几何×权重 扫描
+  dijkstra:
+    topological_cost: "inverse_weight"      # or "unit"
+    distance_key: "euclidean"               # 若无坐标，此项留空或删除
+  navigation:
+    max_steps_factor: 1.0                   # ≤ 1.0 * |V| 限制步数
+    allow_backtrack: true
+    local_scoring_weights:                  # E3 多指标局部打分
+      degree: 0.2
+      weight: 0.4
+      homophily: 0.2
+      dist_to_target: 0.2
+  diffusion:
+    model: "heat_kernel"                    # 或 "k_step_rw"
+    tau: 0.5                                # 热核时间尺度；或 k: 3
+  flow:
+    capacity_key: "weight"                  # V2 用突触数/强度
+    unit_capacity_on_V1: true
+    symmetrize_for_V3: true
+  null_model:
+    type: "configuration"                   # 度序重连
+    n_graphs: 100
+    preserve_in_out: true
+
+report:
+  figures_dir: "results/figures"
+  tables_dir: "results/tables"
+  bootstrap_iter: 1000
+  stats:
+    correlation: "spearman"
+    paired_test: "wilcoxon"
+    fdr: 0.05
