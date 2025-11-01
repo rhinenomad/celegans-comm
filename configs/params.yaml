@@ -10,6 +10,7 @@ data:
     V1: "data/processed/V1/graph_V1_directed_unweighted.gpickle"
     V2: "data/processed/V2/graph_V2_directed_weighted.gpickle"
     V3: "data/processed/V3/graph_V3_undirected.gpickle"
+    V4: "data/processed/V4/graph_V4_directed_unweighted.gpickle"
   # 可选：感/中/运 节点清单（CSV 或 TXT 路径）
   sensory_list: "data/interim/sensory_nodes.txt"
   motor_list:   "data/interim/motor_nodes.txt"

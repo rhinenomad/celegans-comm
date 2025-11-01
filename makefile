@@ -1,7 +1,7 @@
 # ===== C. elegans communication models — Makefile =====
 
 # ---- Basics (override in CLI if needed) ----
-PY        ?= python
+PY        ?= python3
 CFG       ?= configs/params.yaml
 INPUT     ?= data/raw/edges.csv
 PORT      ?= 8000
@@ -19,6 +19,7 @@ OPEN := $(shell if command -v open >/dev/null 2>&1; then echo open; \
 V1 := data/processed/V1/graph_V1_directed_unweighted.gpickle
 V2 := data/processed/V2/graph_V2_directed_weighted.gpickle
 V3 := data/processed/V3/graph_V3_undirected.gpickle
+V4 := data/processed/V4/graph_V4_directed_unweighted.gpickle
 SUMMARY := results/tables/summary_V1_V2_V3.csv
 
 # ---- Figures/Tables (patterns) ----
@@ -91,7 +92,7 @@ open-e2: e2
 e3: $(E3_TBL1) $(E3_TBL2)
 
 $(E3_TBL1) $(E3_TBL2): preprocess
-	$(PY) src/e3_nav/run_nav.py --config $(CFG)
+	$(PY) src/e3_nav/run_nav.py --config $(CFG) --variant V4
 
 # ---- E4: Diffusion baseline ----
 .PHONY: e4
@@ -124,4 +125,4 @@ clean:
 
 distclean: clean
 	@echo "Remove processed graphs…"
-	@rm -rf data/processed/V1 data/processed/V2 data/processed/V3
+	@rm -rf data/processed/V1 data/processed/V2 data/processed/V3 data/processed/V4
