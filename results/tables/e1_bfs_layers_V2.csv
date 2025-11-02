@@ -1,0 +1,7 @@
+seed,layer,new_nodes,cum_covered
+ASIL,0,1,1
+ASIL,1,17,18
+ASIL,2,104,122
+ASIL,3,195,317
+ASIL,4,74,391
+ASIL,5,7,398
