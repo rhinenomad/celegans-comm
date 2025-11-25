@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-将原始图数据（CSV 或 GML）处理为三种版本：
-V1: 有向-不加权（拓扑基线）
-V2: 有向-加权（边权=突触计数/强度）
-V3: 无向（gap层；若无gap则对称化化学层）
-并输出摘要统计到 results/tables/summary_V1_V2_V3.csv
+Process raw graph data (CSV or GML) into three versions:
+V1: Directed-unweighted (topological baseline)
+V2: Directed-weighted (edge weight = synapse count/strength)
+V3: Undirected (gap layer; if no gap, symmetrize chemical layer)
+Output summary statistics to results/tables/summary_V1_V2_V3.csv
 """
 import os, argparse
 from pathlib import Path
@@ -46,24 +46,24 @@ def summarize(G, weighted=False):
                 num_components=num_comp, largest_component=lcc, **wstats)
 
 def read_from_csv(csv_path: Path):
-    """CSV: 必需列 source,target；可选 weight,type (chemical/gap)"""
+    """CSV: Required columns source,target; optional weight,type (chemical/gap)"""
     df = pd.read_csv(csv_path)
     need = {"source","target"}
     if not need.issubset(df.columns):
-        raise ValueError(f"CSV 需包含列: {need}；实际列: {list(df.columns)}")
-    # 化学层（有向）
+        raise ValueError(f"CSV must contain columns: {need}; actual columns: {list(df.columns)}")
+    # Chemical layer (directed)
     chem = df if "type" not in df.columns else df[df["type"].astype(str).str.lower().eq("chemical")]
     Gc = nx.DiGraph()
     for _, r in chem.iterrows():
         u, v = str(r["source"]), str(r["target"])
         w = float(r["weight"]) if "weight" in r and pd.notna(r["weight"]) else 1.0
-        if u == v or w <= 0:  # 去自环和非正权
+        if u == v or w <= 0:  # Remove self-loops and non-positive weights
             continue
         if Gc.has_edge(u, v):
             Gc[u][v]["weight"] += w
         else:
             Gc.add_edge(u, v, weight=w)
-    # gap 层（无向）可选
+    # Gap layer (undirected) optional
     Gg = None
     if "type" in df.columns:
         gap = df[df["type"].astype(str).str.lower().eq("gap")]
@@ -82,7 +82,7 @@ def read_from_csv(csv_path: Path):
 
 def read_from_gml(gml_path: Path):
     G0 = nx.read_gml(gml_path)
-    # 统一为有向图
+    # Convert to directed graph
     Gc = nx.DiGraph()
     Gc.add_nodes_from([str(n) for n in G0.nodes()])
     for u, v, d in G0.edges(data=True):
@@ -94,17 +94,17 @@ def read_from_gml(gml_path: Path):
             Gc[u][v]["weight"] += w
         else:
             Gc.add_edge(u, v, weight=w)
-    return Gc, None  # 无专门gap层
+    return Gc, None  # No dedicated gap layer
 
 def build_variants(Gc: nx.DiGraph, Gg: nx.Graph|None):
-    # V1: 有向-不加权
+    # V1: Directed-unweighted
     V1 = nx.DiGraph()
     V1.add_nodes_from(Gc.nodes(data=True))
     for u, v in Gc.edges():
         V1.add_edge(u, v, weight=1.0)
-    # V2: 有向-加权
+    # V2: Directed-weighted
     V2 = Gc.copy()
-    # V3: 无向（若缺gap层，用化学层对称化）
+    # V3: Undirected (if gap layer missing, symmetrize chemical layer)
     if Gg is None:
         V3 = nx.Graph()
         for u, v, d in Gc.edges(data=True):
@@ -120,7 +120,7 @@ def build_variants(Gc: nx.DiGraph, Gg: nx.Graph|None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
-    ap.add_argument("--input", required=True, help="data/raw/edges.csv 或 .gml")
+    ap.add_argument("--input", required=True, help="data/raw/edges.csv or .gml")
     args = ap.parse_args()
 
     cfg = load_cfg(args.config)
@@ -137,7 +137,7 @@ def main():
     elif ext == ".gml":
         Gc, Gg = read_from_gml(in_path)
     else:
-        raise SystemExit(f"不支持的输入格式: {ext}（请提供 .csv 或 .gml）")
+        raise SystemExit(f"Unsupported input format: {ext} (please provide .csv or .gml)")
 
     V1, V2, V3 = build_variants(Gc, Gg)
     def _dump_graph(G, path):
@@ -152,7 +152,7 @@ def main():
     _dump_graph(V3, outV3)
 
 
-    # 摘要统计
+    # Summary statistics
     tbl_dir = Path(cfg["report"]["tables_dir"]); tbl_dir.mkdir(parents=True, exist_ok=True)
     summary = [
         {"variant":"V1", **summarize(V1, weighted=False)},

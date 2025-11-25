@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Data files (too large for GitHub)
+data/raw/
+data/interim/*
+!data/interim/sensory_nodes.txt
+!data/interim/motor_nodes.txt
+# Allow processed CSV files, but exclude large binary files
+data/processed/*.pickle
+data/processed/*.pkl
+data/processed/*.gpickle
+data/processed/V*/*.pickle
+data/processed/V*/*.gpickle
+*.xlsx
+*.xls
+*.npz
+*.mtx
+*.zip
+
+# Results and outputs
+results/
+outputs/
+figures/
+*.png
+*.pdf
+*.svg
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
