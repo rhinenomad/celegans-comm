@@ -1,2 +1,0 @@
-variant,diffusion_model,model_param,n_nodes,n_edges,rho_diffusion_vs_geodesic,p_value,note
-V2,heat_kernel,tau=0.5,454,4879,0.5826647844733084,0.0,Negative correlation expected (higher diffusion = shorter effective distance)

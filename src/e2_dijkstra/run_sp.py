@@ -50,7 +50,7 @@ def build_cost_graph(G, topo_mode="inverse_weight", use_geo=False, alpha=0.0, po
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/params.yaml")
-    ap.add_argument("--variant", default="V2", choices=["V1","V2"], help="V2 primary; V1 is unweighted control")
+    ap.add_argument("--variant", default="V4", choices=["V1","V2","V4"], help="V2 or V4 (with coordinates) primary; V1 is unweighted control")
     args = ap.parse_args()
 
     C = load_cfg(args.config)

@@ -1,0 +1,14 @@
+Figure Captions
+
+E1: BFS Coverage by Layer
+E1: Layer-wise network coverage analysis using breadth-first search from sensory seed nodes, demonstrating the progressive expansion of reachable nodes across topological distances. Appropriate jitter has been applied to enhance visualization of overlapping data points.
+
+E2: Alpha-sweep Cost Distribution
+E2: Systematic exploration of path cost trade-offs between topological connectivity and geometric distance through parameterized alpha-sweep analysis. Appropriate jitter has been applied to enhance visualization of overlapping data points.
+
+E3: Greedy Navigation Path Length vs Optimal
+E3: Comparative analysis of greedy geometric routing efficiency, measuring path length deviation from optimal shortest paths in the neural connectome. Appropriate jitter has been applied to enhance visualization of overlapping data points.
+
+E4: Diffusion vs Geodesic Distance
+E4: Correlation analysis between heat-kernel communicability (τ=0.5) and geodesic distance, quantifying information flow efficiency across the network topology. Appropriate jitter has been applied to enhance visualization of overlapping data points.
+

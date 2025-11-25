@@ -1,67 +1,102 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-从 WormWiring Excel 文件中提取神经元连接数据，构建图结构
-- 只考虑雌雄同体（hermaphrodite）
-- 化学突触（chemical）和 gap junction 非对称（asymmetric）
-- 只考虑 I（interneuron）、S（sensory）、M（motor）神经元
+Extract neuron connection data from WormWiring Excel files and build graph structure
+- Only consider hermaphrodite
+- Chemical synapses and gap junction (asymmetric)
+- Only consider I (interneuron), S (sensory), M (motor) neurons
 
-工作表结构：
-- 行1: 类型分组标签（列标题位置）
-- 行3: 神经元名称（列标题，从第4列开始）
-- 列1: PHARYNX等非神经元
-- 列3: 神经元名称（行标题，从第4行开始）
-- 数据区域：从第4行第4列开始
+Worksheet structure:
+- Row 1: Type grouping labels (column header position)
+- Row 3: Neuron names (column headers, starting from column 4)
+- Column 1: PHARYNX and other non-neurons
+- Column 3: Neuron names (row headers, starting from row 4)
+- Data area: starting from row 4, column 4
 """
 import openpyxl
 import networkx as nx
 from pathlib import Path
 import pickle
 import pandas as pd
+import re
 
 def find_type_boundaries(ws):
-    """找到类型分组的边界（列和行）"""
-    # 查找第1行中的类型分组列索引
-    type_cols = {}  # {列索引: 类型名称}
+    """Find type grouping boundaries (columns and rows), including excluded type boundaries"""
+    # Find type grouping column indices in row 1
+    type_cols = {}  # {column_index: type_name}
+    exclude_boundaries_col = []  # Column boundaries for excluded types
+    
     for j in range(1, ws.max_column + 1):
         val = ws.cell(1, j).value
         if val is not None:
             val_str = str(val).strip().upper()
-            if 'SENSORY NEURONS' in val_str:
+            # Record boundaries for excluded types
+            if any(exclude in val_str for exclude in ['BODYWALL MUSCLES', 'OTHER END ORGANS', 'SEX-SPECIFIC CELLS', 'SEX SPECIFIC', 'PHARYNX']):
+                exclude_boundaries_col.append(j)
+            elif 'SENSORY NEURONS' in val_str:
                 type_cols[j] = 'S'
             elif 'INTERNEURONS' in val_str or ('INTER' in val_str and 'NEURON' in val_str):
                 type_cols[j] = 'I'
             elif 'MOTOR NEURONS' in val_str:
                 type_cols[j] = 'M'
     
-    # 查找第1列中的类型分组行索引
-    type_rows = {}  # {行索引: 类型名称}
+    # Find type grouping row indices in column 1
+    type_rows = {}  # {row_index: type_name}
+    exclude_boundaries_row = []  # Row boundaries for excluded types
+    
     for i in range(1, ws.max_row + 1):
         val = ws.cell(i, 1).value
         if val is not None:
             val_str = str(val).strip().upper()
-            if 'SENSORY NEURONS' in val_str:
+            # Record boundaries for excluded types
+            if any(exclude in val_str for exclude in ['BODYWALL MUSCLES', 'OTHER END ORGANS', 'SEX-SPECIFIC CELLS', 'SEX SPECIFIC', 'PHARYNX']):
+                exclude_boundaries_row.append(i)
+            elif 'SENSORY NEURONS' in val_str:
                 type_rows[i] = 'S'
             elif 'INTERNEURONS' in val_str or ('INTER' in val_str and 'NEURON' in val_str):
                 type_rows[i] = 'I'
             elif 'MOTOR NEURONS' in val_str:
                 type_rows[i] = 'M'
     
-    return type_cols, type_rows
+    return type_cols, type_rows, exclude_boundaries_col, exclude_boundaries_row
+
+def col_letter_to_num(col_letter):
+    """Convert Excel column letter (e.g., 'BB', 'LM') to column number"""
+    result = 0
+    for char in col_letter:
+        result = result * 26 + (ord(char.upper()) - ord('A') + 1)
+    return result
 
 def extract_neurons(ws):
-    """提取神经元列表及其类型"""
-    # 找到类型分组边界
-    type_cols, type_rows = find_type_boundaries(ws)
+    """Extract neuron list and their types - only extract three neuron types (SENSORY, INTERNEURON, MOTOR)"""
+    # Find type grouping boundaries
+    type_cols, type_rows, exclude_cols, exclude_rows = find_type_boundaries(ws)
     
-    # 提取列标题（第3行，从第4列开始）- 目标神经元
-    neuron_cols = {}  # {神经元名称: (列索引, 类型)}
-    
-    # 确定列的类型分组边界
+    # Extract column headers (row 3) - target neurons
+    neuron_cols = {}  # {neuron_name: (column_index, type)}
     col_boundaries = sorted(type_cols.items())
     
     for j in range(4, ws.max_column + 1):
-        # 确定当前列属于哪个类型
+        # Check if within excluded type range (BODYWALL MUSCLES, etc.)
+        in_exclude = False
+        if exclude_cols:
+            for exc_col in sorted(exclude_cols):
+                if j >= exc_col:
+                    # Find next neuron type grouping
+                    next_neuron_col = None
+                    for col_idx, _ in col_boundaries:
+                        if col_idx > exc_col:
+                            next_neuron_col = col_idx
+                            break
+                    # If current column is between excluded type and next neuron type, exclude it
+                    if next_neuron_col is None or j < next_neuron_col:
+                        in_exclude = True
+                        break
+        
+        if in_exclude:
+            continue
+        
+        # Determine which type the current column belongs to
         neuron_type = None
         for idx, (col_idx, ntype) in enumerate(col_boundaries):
             if j >= col_idx:
@@ -72,21 +107,25 @@ def extract_neurons(ws):
         if neuron_type is None:
             continue
         
-        val = ws.cell(3, j).value  # 第3行是列标题
+        val = ws.cell(3, j).value  # Row 3 contains column headers
         if val is not None:
             neuron_name = str(val).strip()
-            # 排除明显的非神经元名称
             if neuron_name and len(neuron_name) < 20:
                 neuron_cols[neuron_name] = (j, neuron_type)
     
-    # 提取行标题（第3列，从第4行开始）- 源神经元
-    neuron_rows = {}  # {神经元名称: (行索引, 类型)}
-    
-    # 确定行的类型分组边界
+    # Extract row headers (column 3) - source neurons
+    neuron_rows = {}  # {neuron_name: (row_index, type)}
     row_boundaries = sorted(type_rows.items())
     
     for i in range(4, ws.max_row + 1):
-        # 确定当前行属于哪个类型
+        # Check row header, exclude non-neuron types
+        val_header = ws.cell(i, 1).value
+        if val_header is not None:
+            header_str = str(val_header).strip().upper()
+            if any(exclude in header_str for exclude in ['BODYWALL MUSCLES', 'OTHER END ORGANS', 'SEX-SPECIFIC', 'PHARYNX']):
+                continue
+        
+        # Determine which type the current row belongs to
         neuron_type = None
         for idx, (row_idx, ntype) in enumerate(row_boundaries):
             if i >= row_idx:
@@ -97,20 +136,21 @@ def extract_neurons(ws):
         if neuron_type is None:
             continue
         
-        val = ws.cell(i, 3).value  # 第3列是行标题
+        val = ws.cell(i, 3).value  # Column 3 contains row headers
         if val is not None:
             neuron_name = str(val).strip()
-            # 排除明显的非神经元名称
             if neuron_name and len(neuron_name) < 20:
-                neuron_rows[neuron_name] = (i, neuron_type)
+                # Only include nodes that exist in neuron_cols (ensures they are one of the three neuron types)
+                if neuron_name in neuron_cols:
+                    neuron_rows[neuron_name] = (i, neuron_type)
     
     return neuron_rows, neuron_cols
 
 def build_graph(excel_path):
-    """构建图"""
+    """Build graph"""
     wb = openpyxl.load_workbook(excel_path, data_only=True)
     
-    # 找到工作表
+    # Find worksheets
     ws_chemical = None
     ws_gap = None
     for name in wb.sheetnames:
@@ -120,19 +160,19 @@ def build_graph(excel_path):
             ws_gap = wb[name]
     
     if ws_chemical is None or ws_gap is None:
-        raise ValueError(f"找不到所需的工作表")
+        raise ValueError(f"Required worksheets not found")
     
     print("=" * 80)
-    print("解析 WormWiring Excel 文件")
+    print("Parsing WormWiring Excel file")
     print("=" * 80)
-    print(f"使用工作表: {ws_chemical.title}, {ws_gap.title}")
+    print(f"Using worksheets: {ws_chemical.title}, {ws_gap.title}")
     
-    # 提取神经元列表
-    print("\n1. 提取神经元列表...")
+    # Extract neuron list
+    print("\n1. Extracting neuron list...")
     neurons_rows_chem, neurons_cols_chem = extract_neurons(ws_chemical)
     neurons_rows_gap, neurons_cols_gap = extract_neurons(ws_gap)
     
-    # 合并神经元列表（只保留I/S/M类型）
+    # Merge neuron lists (only keep I/S/M types)
     all_neurons = {}
     for name, (row_idx, ntype) in neurons_rows_chem.items():
         if ntype in ['S', 'I', 'M']:
@@ -142,18 +182,18 @@ def build_graph(excel_path):
             if name not in all_neurons:
                 all_neurons[name] = ntype
     
-    print(f"  找到 {len(all_neurons)} 个神经元 (I/S/M类型)")
+    print(f"  Found {len(all_neurons)} neurons (I/S/M types)")
     print(f"  S={sum(1 for t in all_neurons.values() if t=='S')}, "
           f"I={sum(1 for t in all_neurons.values() if t=='I')}, "
           f"M={sum(1 for t in all_neurons.values() if t=='M')}")
     
-    # 创建图
+    # Create graph
     G = nx.DiGraph()
     for name, ntype in all_neurons.items():
         G.add_node(name, neuron_type=ntype)
     
-    # 从化学突触表添加边
-    print("\n2. 添加化学突触边...")
+    # Add edges from chemical synapse table
+    print("\n2. Adding chemical synapse edges...")
     chemical_count = 0
     for source_name, (source_row, _) in neurons_rows_chem.items():
         if source_name not in all_neurons:
@@ -173,10 +213,10 @@ def build_graph(excel_path):
                 except (ValueError, TypeError):
                     pass
     
-    print(f"  添加了 {chemical_count} 条化学突触边")
+    print(f"  Added {chemical_count} chemical synapse edges")
     
-    # 从gap非对称表添加边
-    print("\n3. 添加 gap junction 边...")
+    # Add edges from gap junction (asymmetric) table
+    print("\n3. Adding gap junction edges...")
     gap_count = 0
     both_count = 0
     for source_name, (source_row, _) in neurons_rows_gap.items():
@@ -202,8 +242,8 @@ def build_graph(excel_path):
                 except (ValueError, TypeError):
                     pass
     
-    print(f"  添加了 {gap_count} 条 gap junction 边")
-    print(f"  其中 {both_count} 条边同时有化学和gap连接")
+    print(f"  Added {gap_count} gap junction edges")
+    print(f"  {both_count} edges have both chemical and gap connections")
     
     return G, all_neurons
 
@@ -211,17 +251,17 @@ def main():
     excel_path = Path("data/raw/wormwiring_SI5_connectome_adjacency_corrected_2020.xlsx")
     
     if not excel_path.exists():
-        print(f"错误: 文件不存在 {excel_path}")
+        print(f"Error: File does not exist {excel_path}")
         return
     
     G, neurons = build_graph(excel_path)
     
-    # 统计信息
+    # Statistics
     print("\n" + "=" * 80)
-    print("图统计信息")
+    print("Graph Statistics")
     print("=" * 80)
-    print(f"节点数: {G.number_of_nodes()}")
-    print(f"边数: {G.number_of_edges()}")
+    print(f"Number of nodes: {G.number_of_nodes()}")
+    print(f"Number of edges: {G.number_of_edges()}")
     
     type_counts = {'S': 0, 'I': 0, 'M': 0}
     for node, data in G.nodes(data=True):
@@ -229,33 +269,33 @@ def main():
         if ntype in type_counts:
             type_counts[ntype] += 1
     
-    print(f"\n节点类型分布:")
+    print(f"\nNode type distribution:")
     for ntype, count in type_counts.items():
         print(f"  {ntype}: {count}")
     
-    # 统计边类型
+    # Count edge types
     edge_type_counts = {'chemical': 0, 'gap': 0, 'both': 0}
     for u, v, d in G.edges(data=True):
         etype = d.get('edge_type', 'unknown')
         if etype in edge_type_counts:
             edge_type_counts[etype] += 1
     
-    print(f"\n边类型分布:")
-    print(f"  仅化学突触: {edge_type_counts['chemical']}")
-    print(f"  仅 gap junction: {edge_type_counts['gap']}")
-    print(f"  同时有化学和gap: {edge_type_counts['both']}")
+    print(f"\nEdge type distribution:")
+    print(f"  Chemical only: {edge_type_counts['chemical']}")
+    print(f"  Gap junction only: {edge_type_counts['gap']}")
+    print(f"  Both chemical and gap: {edge_type_counts['both']}")
     
-    # 保存
+    # Save
     output_dir = Path("data/processed")
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # 保存图
+    # Save graph
     graph_path = output_dir / "graph_wormwiring_hermaphrodite_ISM.pickle"
     with open(graph_path, 'wb') as f:
         pickle.dump(G, f)
-    print(f"\n✓ 图已保存: {graph_path}")
+    print(f"\n✓ Graph saved: {graph_path}")
     
-    # 保存CSV
+    # Save CSV
     edges_data = []
     for u, v, d in G.edges(data=True):
         edges_data.append({
@@ -271,23 +311,23 @@ def main():
     df_edges = pd.DataFrame(edges_data)
     edges_csv = output_dir / "edges_wormwiring_ISM.csv"
     df_edges.to_csv(edges_csv, index=False)
-    print(f"✓ 边列表已保存: {edges_csv}")
+    print(f"✓ Edge list saved: {edges_csv}")
     
     nodes_data = [{'node_id': n, 'neuron_type': d['neuron_type']} 
                   for n, d in G.nodes(data=True)]
     df_nodes = pd.DataFrame(nodes_data)
     nodes_csv = output_dir / "nodes_wormwiring_ISM.csv"
     df_nodes.to_csv(nodes_csv, index=False)
-    print(f"✓ 节点列表已保存: {nodes_csv}")
+    print(f"✓ Node list saved: {nodes_csv}")
     
-    # 显示示例
+    # Display examples
     print("\n" + "=" * 80)
-    print("示例节点（前15个）:")
+    print("Example nodes (first 15):")
     print("=" * 80)
     for i, (node, data) in enumerate(list(G.nodes(data=True))[:15]):
         print(f"  {node}: {data['neuron_type']}")
     
-    print("\n示例边（前10条）:")
+    print("\nExample edges (first 10):")
     print("=" * 80)
     for i, (u, v, d) in enumerate(list(G.edges(data=True))[:10]):
         chem = d.get('chemical_weight', 0)
